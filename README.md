@@ -35,14 +35,12 @@ Reads `../raw_data/UseCase_-_Airlines.xlsx`, writes cleaned CSVs + a SQLite DB t
 
 ## Data quality issues found and handled
 
-| Issue | Count | Handling |
-|---|---|---|
-| Missing/UNKNOWN airline | 69 | Relabeled, flagged, kept |
-| Duplicate flight rows | 15 | Only exact duplicates dropped |
-| Overnight (cross-midnight) flights | 125 | Duration recalculated from full timestamps |
-| Missing booking status | 45 | Filled as UNKNOWN, flagged |
-| Duplicate passenger IDs | 39 | Kept first occurrence |
-| Missing payment amount | 78 | Flagged, excluded from revenue sums |
+- Missing/UNKNOWN airline (69 rows) — relabeled, flagged, kept
+- Duplicate flight rows (15) — only exact duplicates dropped
+- Overnight, cross-midnight flights (125) — duration recalculated from full timestamps
+- Missing booking status (45) — filled as UNKNOWN, flagged
+- Duplicate passenger IDs (39) — kept first occurrence
+- Missing payment amount (78) — flagged, excluded from revenue sums
 
 Full reasoning for each is in the Word doc under Section 6.
 
