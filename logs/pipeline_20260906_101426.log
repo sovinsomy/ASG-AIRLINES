@@ -1,0 +1,18 @@
+2026-09-06 10:14:26,134 | INFO | === Pipeline run started ===
+2026-09-06 10:14:26,134 | INFO | Reading source file: E:\JDs\NeoStats\Airlines Use Case\Submission\asg_pipeline\raw_data\UseCase_-_Airlines.xlsx
+2026-09-06 10:14:26,543 | INFO | Loaded 'flights' -> 1020 rows, 7 columns
+2026-09-06 10:14:26,543 | INFO | Loaded 'payments' -> 1000 rows, 4 columns
+2026-09-06 10:14:26,543 | INFO | Loaded 'bookings' -> 1000 rows, 9 columns
+2026-09-06 10:14:26,543 | INFO | Loaded 'passengers' -> 1039 rows, 9 columns
+2026-09-06 10:14:26,559 | INFO | flights: removed 15 exact duplicate rows
+2026-09-06 10:14:26,569 | INFO | flights: 1020 -> 1005 rows after cleaning, 0 flagged as duration anomalies
+2026-09-06 10:14:26,570 | INFO | bookings: dropped 0 duplicate booking_id rows
+2026-09-06 10:14:26,571 | INFO | passengers: 1039 -> 1000 rows after de-duplication
+2026-09-06 10:14:26,572 | INFO | payments: 78 rows have missing amount, flagged rather than imputed
+2026-09-06 10:14:26,577 | INFO | PII masking applied: aadhaar_id (hashed), passport_number (hashed), email/phone (partially masked), emergency contact (hashed)
+2026-09-06 10:14:26,612 | INFO | Saved cleaned 'flights' -> CSV + SQLite (1005 rows)
+2026-09-06 10:14:26,624 | INFO | Saved cleaned 'bookings' -> CSV + SQLite (1000 rows)
+2026-09-06 10:14:26,635 | INFO | Saved cleaned 'passengers' -> CSV + SQLite (1000 rows)
+2026-09-06 10:14:26,643 | INFO | Saved cleaned 'payments' -> CSV + SQLite (1000 rows)
+2026-09-06 10:14:26,646 | INFO | All outputs written to E:\JDs\NeoStats\Airlines Use Case\Submission\asg_pipeline\cleaned_data and E:\JDs\NeoStats\Airlines Use Case\Submission\asg_pipeline\cleaned_data\asg_airlines.db
+2026-09-06 10:14:26,646 | INFO | === Pipeline run finished ===

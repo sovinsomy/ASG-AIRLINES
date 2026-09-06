@@ -1,11 +1,5 @@
-"""
-ASG Airlines - Data Engineering Pipeline
------------------------------------------
-Ingests raw flight/booking/passenger/payment data, cleans it, masks PII,
-and produces an analytics-ready dataset with KPIs.
-
+"""ASG Airlines data pipeline - cleans flight/booking/passenger/payment data, masks PII, computes KPIs.
 Run: python pipeline.py
-Output: cleaned CSVs in ../cleaned_data/, log file in ../logs/
 """
 
 import pandas as pd
@@ -48,16 +42,12 @@ def clean_flights(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     before = len(df)
 
-    # airline: 'UNKNOWN' and blank both mean the same thing - not recorded.
-    # Rather than drop these rows (we'd lose real route/duration data), we
-    # flag them so downstream KPIs can choose to include/exclude.
+    # UNKNOWN/blank airline = not recorded; flagged and kept so route/duration data isn't lost
     df["airline"] = df["airline"].replace("UNKNOWN", np.nan)
     df["airline_missing_flag"] = df["airline"].isna()
     df["airline"] = df["airline"].fillna("Not Recorded")
 
-    # duplicate flight_id: same code reused across different departure times
-    # is normal in real airline schedules (a flight number flies daily), so a
-    # duplicate is only a problem if the whole row repeats.
+    # a reused flight_id is normal (same flight number flies daily); only exact duplicate rows are dropped
     exact_dupes = df.duplicated(subset=["flight_id", "departure_time", "arrival_time"]).sum()
     df = df.drop_duplicates(subset=["flight_id", "departure_time", "arrival_time"])
     log.info("flights: removed %d exact duplicate rows", exact_dupes)
@@ -69,10 +59,7 @@ def clean_flights(df: pd.DataFrame) -> pd.DataFrame:
         log.warning("flights: %d unparseable timestamps found and dropped", bad_dates)
     df = df.dropna(subset=["departure_time", "arrival_time"])
 
-    # Overnight handling: arrival before departure on paper just means it
-    # rolled into the next day. The source timestamps already carry a full
-    # date, so this mostly self-corrects, but we still assert it here so a
-    # future data feed that only sends time-of-day won't silently break.
+    # arrival before departure just means it rolled past midnight; timestamps already carry the right date
     crosses_midnight = df["arrival_time"] < df["departure_time"]
     df.loc[crosses_midnight, "arrival_time"] += pd.Timedelta(days=1)
 
@@ -83,8 +70,7 @@ def clean_flights(df: pd.DataFrame) -> pd.DataFrame:
     df["destination"] = df["destination"].str.strip().str.upper()
     df["route"] = df["source"] + "-" + df["destination"]
 
-    # anomaly flag: negative/zero or implausibly long duration for a domestic
-    # sector (>6 hrs for these routes is unrealistic and worth a human look)
+    # flag negative/zero or >6hr durations as unrealistic for these domestic routes
     df["duration_anomaly"] = (df["duration_minutes"] <= 0) | (df["duration_minutes"] > 360)
 
     log.info("flights: %d -> %d rows after cleaning, %d flagged as duration anomalies",
@@ -96,8 +82,7 @@ def clean_bookings(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["status"] = df["status"].fillna("UNKNOWN")
     df["status"] = df["status"].str.strip().str.upper()
-    # 'INVALID' is a genuine data-entry error, not a real booking state -
-    # keep the row (still spent seat/revenue) but tag it for reporting.
+    # INVALID is a real but flagged status, not removed - still represents a seat/payment event
     df["status_is_invalid"] = df["status"] == "INVALID"
     dupes = df.duplicated(subset=["booking_id"]).sum()
     df = df.drop_duplicates(subset=["booking_id"])
@@ -108,8 +93,7 @@ def clean_bookings(df: pd.DataFrame) -> pd.DataFrame:
 def clean_passengers(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     before = len(df)
-    # Duplicate passenger_id with identical details = re-ingestion issue,
-    # keep the first occurrence.
+    # duplicate passenger_id = re-ingestion artifact; keep first occurrence
     df = df.drop_duplicates(subset=["passenger_id"])
     df["last_name"] = df["last_name"].fillna("")
     log.info("passengers: %d -> %d rows after de-duplication", before, len(df))
@@ -120,8 +104,7 @@ def clean_payments(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
     missing = df["amount"].isna().sum()
-    # Missing amount isn't something we should guess at (money), so we keep
-    # the row for join integrity but flag it out of revenue sums explicitly.
+    # missing amount isn't guessed at; flagged and excluded from revenue sums instead
     df["amount_missing_flag"] = df["amount"].isna()
     log.info("payments: %d rows have missing amount, flagged rather than imputed", missing)
     return df
@@ -130,8 +113,7 @@ def clean_payments(df: pd.DataFrame) -> pd.DataFrame:
 # ---------- 3. PII MASKING ----------
 
 def mask_value(value: str, salt: str = "asg_airlines_2026") -> str:
-    """One-way SHA-256 hash so masked values are still usable as join keys
-    for internal analytics, but the original PII can't be recovered."""
+    """One-way hash so masked values still work as join keys but can't be reversed."""
     if pd.isna(value):
         return value
     return hashlib.sha256(f"{salt}{value}".encode()).hexdigest()[:16]
@@ -161,7 +143,7 @@ def apply_pii_masking(passengers: pd.DataFrame, bookings: pd.DataFrame) -> tuple
 
     bookings["passport_number"] = bookings["passport_number"].apply(mask_value)
     bookings["emergency_contact_phone"] = bookings["emergency_contact_phone"].apply(mask_phone)
-    # name kept but not linked publicly; hashed for anyone without the "authorized" role
+    # not the passenger's own PII, but hashed anyway since there's no analytical need to expose it
     bookings["emergency_contact_name"] = bookings["emergency_contact_name"].apply(mask_value)
 
     log.info("PII masking applied: aadhaar_id (hashed), passport_number (hashed), "
@@ -198,8 +180,7 @@ def build_kpis(flights: pd.DataFrame, bookings: pd.DataFrame, payments: pd.DataF
         ["flight_id", "airline", "route", "departure_time", "arrival_time", "duration_minutes"]
     ]
 
-    # revenue KPI (the "additional KPI" the brief asks for) - joins
-    # bookings -> payments, only counting confirmed bookings as real revenue
+    # additional KPI the brief asks for - only confirmed bookings count as revenue
     confirmed = bookings[bookings["status"] == "CONFIRMED"]
     rev = confirmed.merge(payments, on="booking_id", how="left")
     rev = rev.merge(flights[["flight_id", "route"]], on="flight_id", how="left")
