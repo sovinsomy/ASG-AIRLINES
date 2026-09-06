@@ -50,6 +50,8 @@ function image(path, width, height) {
 }
 
 const doc = new Document({
+  creator: "sovin",
+  lastModifiedBy: "sovin",
   sections: [{
     properties: { page: { size: { width: 12240, height: 15840 } } },
     children: [
@@ -72,6 +74,7 @@ const doc = new Document({
 
       heading("2. Architecture"),
       body("The pipeline follows a straightforward ingest → clean → store → visualize flow. Everything runs as a single Python script for this assignment, but each stage is a separate function so it could be lifted into Azure Data Factory / Databricks activities later without restructuring the logic."),
+      body("At this volume (~1,000 rows per table), pandas in memory is the right call — it's simple to read, debug, and rerun. It wouldn't scale past that as-is: the cleaning functions would need to move to PySpark or ADF mapping data flows to parallelize the groupby/join work, and the KPI aggregations would move from pandas into the warehouse layer (Synapse/Databricks SQL) instead of being computed in memory. Keeping each stage as its own function was a deliberate choice so that swap is a rewrite of individual pieces, not a redesign of the whole flow."),
       image("images/architecture_diagram.png", 580, 240),
 
       heading("3. Data Flow"),
@@ -90,7 +93,7 @@ const doc = new Document({
           ["flights", "flight_id, airline, source, destination, departure_time, arrival_time, duration", "1,020 rows. Timestamps are already full datetimes — duration formula was pre-computed in the source."],
           ["bookings", "booking_id, passenger_id, flight_id, status, passport_number, seat_number", "1,000 rows. Links passengers to flights; contains passport and emergency contact PII."],
           ["passengers", "passenger_id, first_name, last_name, age, gender, email, phone, aadhaar_id, date_of_birth", "1,039 rows before de-duplication. Aadhaar ID is the most sensitive field in the dataset."],
-          ["payments", "payment_id, booking_id, amount, payment_method", "1,000 rows. One-to-one with bookings in this dataset."],
+          ["payments", "payment_id, booking_id, amount, payment_method", "1,000 rows. One-to-many with bookings — 267 bookings have more than one payment row, mostly a failed/missing-amount attempt followed by a successful one."],
         ],
         [1600, 4800, 3200]
       ),
@@ -100,13 +103,13 @@ const doc = new Document({
       table(
         ["Issue", "Found", "Assumption / Handling"],
         [
-          ["Missing / 'UNKNOWN' airline", "41 rows", "Kept the row (route and duration data is still valid), relabeled to 'Not Recorded', flagged separately so KPIs can include/exclude on demand."],
-          ["Duplicate flight rows", "16 rows shared a flight_id, but only exact duplicates (same id + departure + arrival) were dropped", "A flight number reused across different days is normal airline scheduling, not a data error — only removed true row-level duplicates."],
+          ["Missing / 'UNKNOWN' airline", "69 rows", "Kept the row (route and duration data is still valid), relabeled to 'Not Recorded', flagged separately so KPIs can include/exclude on demand."],
+          ["Duplicate flight rows", "15 rows shared a flight_id, but only exact duplicates (same id + departure + arrival) were dropped", "A flight number reused across different days is normal airline scheduling, not a data error — only removed true row-level duplicates."],
           ["Overnight (cross-midnight) flights", "125 flights", "Source timestamps already carry the correct next-day date. Added an explicit midnight-rollover check so duration stays correct even if a future feed only sends time-of-day."],
           ["Missing booking status", "45 rows", "Filled as 'UNKNOWN' rather than dropped, since the booking and its passenger/payment links are still valid."],
           ["'INVALID' booking status", "present in data", "Treated as a real but flagged status (data-entry error), not removed — it still represents a seat/payment event."],
           ["Duplicate passenger_id", "39 rows", "Kept first occurrence only, assumed later duplicates are re-ingestion artifacts."],
-          ["Missing payment amount", "48 rows", "Not imputed — money shouldn't be guessed at. Flagged and excluded from revenue sums, kept for join integrity."],
+          ["Missing payment amount", "78 rows", "Not imputed — money shouldn't be guessed at. Flagged and excluded from revenue sums, kept for join integrity."],
         ],
         [2400, 2400, 4800]
       ),
